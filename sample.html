@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sudoku Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color:rgb(239, 229, 229);
+            color: rgb(0, 0, 0);
+        }
+        .hidden {
+            display: none;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(9, 40px);
+            grid-template-rows: repeat(9, 40px);
+            gap: 2px;
+            margin: 20px auto;
+            width: fit-content;
+        }
+        .cell {
+            width: 40px;
+            height: 40px;
+            text-align: center;
+            font-size: 20px;
+            border: 1px solid black;
+        }
+        .button {
+            margin-top: 10px;
+            padding: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #timer {
+            font-size: 20px;
+            margin-top: 10px;
+        }
+        #notepad {
+            margin-top: 20px;
+            width: 200px;
+            height: 100px;
+            font-size: 16px;
+        }
+        .solution-grid {
+            display: grid;
+            grid-template-columns: repeat(9, 40px);
+            grid-template-rows: repeat(9, 40px);
+            gap: 2px;
+            margin: 20px auto;
+            width: fit-content;
+            margin-left: 50px; /* Add some spacing for better layout */
+        }
+    </style>
+</head>
+<body>
+    <div id="welcome-screen" class="screen">
+        <h1>🎉 Welcome to Sudoku! 🎉</h1>
+        <h2><b>📜 Instructions:</b></h2>
+        <p>🔢 <b>How to Play:</b></p>
+        <p>🎯 Click on an empty cell to select it.<br>
+        🔢 Enter a number between 1 and 9.<br>
+        📏 Each number must appear only once in every row, column, and 3×3 subgrid.</p>
+        <h2>💡 Features & Controls:</h2>
+        <p>
+            🧩 <b>Hint Button:</b> Click to reveal the correct number for a selected empty cell.<br>
+            ✅ <b>Check Button:</b> Click to compare your solution with the correct one.<br>
+            🔄 <b>Restart Button:</b> Resets the puzzle while keeping the same game.<br>
+            ⏸ <b>Pause Button:</b> Stops the timer so you can take a break.<br>
+            📝 <b>Notepad:</b> Use it to jot down possible numbers before making a final decision.
+        </p>
+        <button class="button" onclick="showDifficultySelection()">➡ Next</button>
+    </div>
+
+    <div id="difficulty-screen" class="screen hidden">
+        <h1>🎯 Select Difficulty</h1>
+        <label for="difficulty">📊 Choose a difficulty level:</label>
+        <select id="difficulty">
+            <option value="easy">😃 Easy</option>
+            <option value="medium">😐 Medium</option>
+            <option value="hard">😡 Hard</option>
+        </select>
+        <button class="button" onclick="startGame()">🎮 New Game</button>
+    </div>
+
+    <div id="game-screen" class="hidden">
+        <h1>Sudoku Game</h1>
+        <div id="timer">Time: 00:00</div>
+        <div style="display: flex; justify-content: center;">
+            <div id="sudoku-board" class="grid"></div>
+            <div id="solution-board" class="solution-grid hidden"></div> <!-- Initially hidden -->
+        </div>
+        <button class="button" onclick="getHint()">Hint</button>
+        <button class="button" onclick="togglePause()">Pause</button>
+        <button class="button" onclick="restartGame()">Restart</button>
+        <button class="button" onclick="checkSolution()">Check</button>
+        <h3>Notepad</h3>
+        <textarea id="notepad" placeholder="Write your notes here..."></textarea>
+    </div>
+
+    <script>
+        let timerInterval;
+        let seconds = 0;
+        let isPaused = false;
+        let currentGrid;
+        let solutionGrid;
+        let selectedCell = null;
+
+        function showDifficultySelection() {
+            document.getElementById("welcome-screen").classList.add("hidden");
+            document.getElementById("difficulty-screen").classList.remove("hidden");
+        }
+
+        function startGame() {
+            seconds = 0;
+            isPaused = false;
+            clearInterval(timerInterval);
+            timerInterval = setInterval(updateTimer, 1000);
+
+            const difficulty = document.getElementById("difficulty").value;
+            document.getElementById("difficulty-screen").classList.add("hidden");
+            document.getElementById("game-screen").classList.remove("hidden");
+            let generated = generateSudoku(difficulty);
+            currentGrid = generated.puzzle;
+            solutionGrid = generated.solution;
+            createBoard(currentGrid);
+        }
+
+        function restartGame() {
+            createBoard(currentGrid);
+            document.getElementById("solution-board").classList.add("hidden"); // Hide solution grid
+            seconds = 0;
+            isPaused = false;
+            clearInterval(timerInterval);
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+
+        function updateTimer() {
+            if (!isPaused) {
+                seconds++;
+                let minutes = Math.floor(seconds / 60);
+                let secs = seconds % 60;
+                document.getElementById("timer").textContent = `Time: ${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+            }
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+        }
+
+        // Function to create the original Sudoku board
+        function createBoard(grid) {
+            const board = document.getElementById("sudoku-board");
+            board.innerHTML = "";
+            for (let i = 0; i < 9; i++) {
+                for (let j = 0; j < 9; j++) {
+                    let cell = document.createElement("input");
+                    cell.type = "text";
+                    cell.className = "cell";
+                    cell.maxLength = 1;
+                    cell.dataset.row = i;
+                    cell.dataset.col = j;
+                    cell.addEventListener("click", () => selectedCell = cell);
+                    
+                    // Restrict input to only 1-9
+                    cell.addEventListener("input", function () {
+                        if (!/^[1-9]$/.test(this.value)) {
+                            this.value = "";  // Clear invalid input
+                        }
+                    });
+
+                    if (grid[i][j] !== 0) {
+                        cell.value = grid[i][j];
+                        cell.disabled = true;
+                    }
+                    board.appendChild(cell);
+                }
+            }
+        }
+
+        // Function to create the solution Sudoku board
+        function createSolutionBoard(grid) {
+            const board = document.getElementById("solution-board");
+            board.innerHTML = "";
+            for (let i = 0; i < 9; i++) {
+                for (let j = 0; j < 9; j++) {
+                    let cell = document.createElement("input");
+                    cell.type = "text";
+                    cell.className = "cell";
+                    cell.maxLength = 1;
+                    cell.value = grid[i][j];
+                    cell.disabled = true;  // Make the solution grid non-editable
+                    board.appendChild(cell);
+                }
+            }
+        }
+
+        function getHint() {
+            if (selectedCell && !selectedCell.disabled) {
+                let row = parseInt(selectedCell.dataset.row);
+                let col = parseInt(selectedCell.dataset.col);
+                if (solutionGrid && solutionGrid[row] && solutionGrid[row][col] !== undefined) {
+                    selectedCell.value = solutionGrid[row][col];
+                    selectedCell.disabled = true;
+                }
+            }
+        }
+
+        function checkSolution() {
+            let allCorrect = true;
+            const cells = document.querySelectorAll(".cell");
+
+            cells.forEach(cell => {
+                let row = parseInt(cell.dataset.row);
+                let col = parseInt(cell.dataset.col);
+                let userValue = cell.value;
+
+                if (!cell.disabled) {
+                    if (userValue == solutionGrid[row][col]) {
+                        cell.style.backgroundColor = "lightgreen"; // ✅ Correct
+                    } else {
+                        cell.style.backgroundColor = "lightcoral"; // ❌ Incorrect
+                        allCorrect = false;
+                    }
+                }
+            });
+
+            if (allCorrect) {
+                alert("🎉 Congratulations! You solved the puzzle correctly!");
+            } else {
+                alert("⚠ Some numbers are incorrect.");
+            }
+
+            // Show the solution grid when the user checks their solution
+            document.getElementById("solution-board").classList.remove("hidden");
+            createSolutionBoard(solutionGrid); // Generate solution board
+        }
+
+        // Generate Sudoku puzzle based on difficulty
+        function generateSudoku(difficulty) {
+            let baseSolution = [
+                [5, 3, 4, 6, 7, 8, 9, 1, 2],
+                [6, 7, 2, 1, 9, 5, 3, 4, 8],
+                [1, 9, 8, 3, 4, 2, 5, 6, 7],
+                [8, 5, 9, 7, 6, 1, 4, 2, 3],
+                [4, 2, 6, 8, 5, 3, 7, 9, 1],
+                [7, 1, 3, 9, 2, 4, 8, 5, 6],
+                [9, 6, 1, 5, 3, 7, 2, 8, 4],
+                [2, 8, 7, 4, 1, 9, 6, 3, 5],
+                [3, 4, 5, 2, 8, 6, 1, 7, 9]
+            ];
+            let puzzle = baseSolution.map(row => row.map(num => Math.random() > 0.5 ? num : 0));
+            return { puzzle, solution: baseSolution };
+        }
+    </script>
+</body>
+</html>
